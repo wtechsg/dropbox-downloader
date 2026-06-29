@@ -83,12 +83,15 @@
       box-sizing: border-box;
     }
 
-    .result-actions a {
+    .result-actions a,
+    .download-btn-style {
       background: #0061fe;
       color: white;
+      border: none;
     }
 
-    .result-actions a:hover {
+    .result-actions a:hover,
+    .download-btn-style:hover {
       background: #0050d8;
     }
 
@@ -137,7 +140,7 @@
     <div class="result-label">Direct download link:</div>
     <div id="resultLink" class="result-link"></div>
     <div class="result-actions">
-      <a id="downloadAnchor" href="#" target="_blank" rel="noopener">Download Now</a>
+      <button id="downloadBtn" class="download-btn-style" onclick="triggerDownload()">Download Now</button>
       <button class="copy-btn" onclick="copyLink()">Copy Link</button>
     </div>
     <div id="folderNote" class="folder-note">
@@ -150,6 +153,8 @@
   </p>
 
   <script>
+    let currentDirectUrl = '';
+
     function convertLink() {
       const input = document.getElementById('dropboxLink').value.trim();
       const status = document.getElementById('status');
@@ -185,15 +190,28 @@
       // Force direct download: dl=1 takes precedence even if other params exist.
       url.searchParams.set('dl', '1');
 
-      const directUrl = url.toString();
+      currentDirectUrl = url.toString();
 
-      document.getElementById('resultLink').textContent = directUrl;
-      document.getElementById('downloadAnchor').href = directUrl;
+      document.getElementById('resultLink').textContent = currentDirectUrl;
       resultBox.classList.add('show');
 
       if (isFolder) {
         folderNote.classList.add('show');
       }
+    }
+
+    // Triggers the download via a hidden, programmatically-clicked anchor
+    // instead of target="_blank", so the browser starts the download
+    // without visibly switching to or flashing open a new tab.
+    function triggerDownload() {
+      if (!currentDirectUrl) return;
+      const a = document.createElement('a');
+      a.href = currentDirectUrl;
+      a.download = ''; // hint to download rather than navigate, where the browser allows it
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function copyLink() {
