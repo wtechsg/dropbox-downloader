@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dropbox Direct Download Link Converter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      text-align: center;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+      background: #0061fe; /* Dropbox blue */
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background: #0050d8;
+    }
+
+    button:disabled {
+      background: #aac4f0;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: red;
+      font-size: 14px;
+    }
+
+    .result-box {
+      display: none;
+      margin-top: 20px;
+      padding: 16px;
+      background: #f5f7fa;
+      border-radius: 6px;
+      text-align: left;
+    }
+
+    .result-box.show {
+      display: block;
+    }
+
+    .result-label {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
+    .result-link {
+      word-break: break-all;
+      font-size: 14px;
+      color: #0061fe;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .result-actions button,
+    .result-actions a {
+      flex: 1;
+      padding: 10px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 14px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+
+    .result-actions a {
+      background: #0061fe;
+      color: white;
+    }
+
+    .result-actions a:hover {
+      background: #0050d8;
+    }
+
+    .copy-btn {
+      background: white;
+      color: #0061fe;
+      border: 1px solid #0061fe;
+    }
+
+    .copy-btn:hover {
+      background: #f0f5ff;
+    }
+
+    .note {
+      font-size: 12px;
+      color: #888;
+      margin-top: 16px;
+      text-align: left;
+    }
+
+    .folder-note {
+      display: none;
+      font-size: 13px;
+      color: #555;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-top: 10px;
+      text-align: left;
+    }
+
+    .folder-note.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h2>Dropbox Direct Download Link</h2>
+  <p>Paste a Dropbox shared file or folder link below to get a direct download link.</p>
+  <input id="dropboxLink" type="text" placeholder="https://www.dropbox.com/scl/fi/.../file.pdf?rlkey=...&dl=0" />
+  <button id="convertBtn" onclick="convertLink()">Get Download Link</button>
+  <p id="status" class="error"></p>
+
+  <div id="resultBox" class="result-box">
+    <div class="result-label">Direct download link:</div>
+    <div id="resultLink" class="result-link"></div>
+    <div class="result-actions">
+      <a id="downloadAnchor" href="#" target="_blank" rel="noopener">Download Now</a>
+      <button class="copy-btn" onclick="copyLink()">Copy Link</button>
+    </div>
+    <div id="folderNote" class="folder-note">
+      This is a folder link — Dropbox will zip the entire folder server-side before downloading. Large folders may take a while.
+    </div>
+  </div>
+
+  <p class="note">
+    This works directly with Dropbox's own shared-link parameters — no account, API key, or login required. It only works for links someone has already shared with "Anyone with the link" access.
+  </p>
+
+  <script>
+    function convertLink() {
+      const input = document.getElementById('dropboxLink').value.trim();
+      const status = document.getElementById('status');
+      const resultBox = document.getElementById('resultBox');
+      const folderNote = document.getElementById('folderNote');
+      status.textContent = '';
+      resultBox.classList.remove('show');
+      folderNote.classList.remove('show');
+
+      if (!input) {
+        status.textContent = 'Please paste a Dropbox link first.';
+        return;
+      }
+
+      let url;
+      try {
+        url = new URL(input);
+      } catch (e) {
+        status.textContent = 'That doesn\'t look like a valid URL.';
+        return;
+      }
+
+      const validHosts = ['www.dropbox.com', 'dropbox.com'];
+      if (!validHosts.includes(url.hostname)) {
+        status.textContent = 'This doesn\'t look like a dropbox.com link.';
+        return;
+      }
+
+      // Folder links use /scl/fo/ (new format) — Dropbox zips these server-side on download.
+      // File links use /scl/fi/ (new format) or the legacy /s/ format.
+      const isFolder = url.pathname.includes('/scl/fo/');
+
+      // Force direct download: dl=1 takes precedence even if other params exist.
+      url.searchParams.set('dl', '1');
+
+      const directUrl = url.toString();
+
+      document.getElementById('resultLink').textContent = directUrl;
+      document.getElementById('downloadAnchor').href = directUrl;
+      resultBox.classList.add('show');
+
+      if (isFolder) {
+        folderNote.classList.add('show');
+      }
+    }
+
+    function copyLink() {
+      const link = document.getElementById('resultLink').textContent;
+      navigator.clipboard.writeText(link).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = original; }, 1500);
+      }).catch(() => {
+        alert('Could not copy automatically. Please select and copy the link manually.');
+      });
+    }
+
+    // Allow pressing Enter in the input field to trigger conversion.
+    document.getElementById('dropboxLink').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') convertLink();
+    });
+  </script>
+</body>
+</html>
