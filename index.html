@@ -130,7 +130,7 @@
   </style>
 </head>
 <body>
-  <h2>Dropbox Direct Download Linkx</h2>
+  <h2>Dropbox Direct Download Link</h2>
   <p>Paste a Dropbox shared file or folder link below to get a direct download link.</p>
   <input id="dropboxLink" type="text" placeholder="https://www.dropbox.com/scl/fi/.../file.pdf?rlkey=...&dl=0" />
   <button id="convertBtn" onclick="convertLink()">Get Download Link</button>
@@ -146,6 +146,7 @@
     <div id="folderNote" class="folder-note">
       This is a folder link — Dropbox will zip the entire folder server-side before downloading. Large folders may take a while.
     </div>
+    <div id="downloadStatus" class="note" style="margin-top:10px;"></div>
   </div>
 
   <p class="note">
@@ -153,14 +154,24 @@
   </p>
 
   <script>
+    // Set this to your deployed Cloudflare Worker URL (see dropbox-cors-proxy-worker.js).
+    // Example: 'https://your-worker.workers.dev'
+    // If left blank, the "Download Now" button falls back to opening the
+    // link via hidden anchor (works, but Dropbox's own page may briefly
+    // flash before redirecting, since that path doesn't use the proxy).
+    const PROXY_BASE = 'https://damp-sun-c60.wbsg3102.workers.dev/';
+
     let currentDirectUrl = '';
+    let currentFileName = '';
 
     function convertLink() {
       const input = document.getElementById('dropboxLink').value.trim();
       const status = document.getElementById('status');
       const resultBox = document.getElementById('resultBox');
       const folderNote = document.getElementById('folderNote');
+      const downloadStatus = document.getElementById('downloadStatus');
       status.textContent = '';
+      downloadStatus.textContent = '';
       resultBox.classList.remove('show');
       folderNote.classList.remove('show');
 
@@ -192,6 +203,12 @@
 
       currentDirectUrl = url.toString();
 
+      // Best-effort filename guess from the path, used when saving the blob.
+      // Folders come back as a .zip regardless of the path segment name.
+      const pathParts = url.pathname.split('/').filter(Boolean);
+      const lastSegment = pathParts[pathParts.length - 1] || 'download';
+      currentFileName = isFolder ? `${lastSegment}.zip` : lastSegment;
+
       document.getElementById('resultLink').textContent = currentDirectUrl;
       resultBox.classList.add('show');
 
@@ -200,11 +217,56 @@
       }
     }
 
-    // Triggers the download via a hidden, programmatically-clicked anchor
-    // instead of target="_blank", so the browser starts the download
-    // without visibly switching to or flashing open a new tab.
-    function triggerDownload() {
+    // Downloads the file directly, with no page navigation or visible tab.
+    // If PROXY_BASE is configured, fetches the bytes through the CORS proxy
+    // and saves them as a blob — the cleanest, most reliable approach since
+    // it never touches Dropbox's own page at all.
+    // If PROXY_BASE is not configured, falls back to a hidden-anchor click,
+    // which still avoids a visible tab but is still a real navigation under
+    // the hood (subject to whatever Dropbox's page does before redirecting).
+    async function triggerDownload() {
       if (!currentDirectUrl) return;
+      const downloadStatus = document.getElementById('downloadStatus');
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      if (!PROXY_BASE) {
+        triggerDownloadViaHiddenAnchor();
+        return;
+      }
+
+      downloadBtn.disabled = true;
+      downloadStatus.textContent = 'Downloading…';
+
+      try {
+        const proxyUrl = `${PROXY_BASE}/?url=${encodeURIComponent(currentDirectUrl)}`;
+        const res = await fetch(proxyUrl);
+
+        if (!res.ok) {
+          throw new Error(`Server returned ${res.status}`);
+        }
+
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = currentFileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+
+        downloadStatus.textContent = 'Done.';
+      } catch (err) {
+        console.error(err);
+        downloadStatus.textContent = `Download failed: ${err.message}. Falling back to direct link…`;
+        triggerDownloadViaHiddenAnchor();
+      } finally {
+        downloadBtn.disabled = false;
+      }
+    }
+
+    // Fallback / no-proxy-configured path: hidden anchor click.
+    function triggerDownloadViaHiddenAnchor() {
       const a = document.createElement('a');
       a.href = currentDirectUrl;
       a.download = ''; // hint to download rather than navigate, where the browser allows it
